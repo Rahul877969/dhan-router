@@ -1,15 +1,9 @@
 name: Telegram Bot (on-demand analysis)
 
-# Polls every 5 min.  When you send /analysis (or any /command) in
-# your Telegram chat, nightly_engine.py fires and sends the full
-# WHY-analysis message back to you within ~1-2 minutes.
-#
-# Also triggerable manually from GitHub Actions UI at any time.
-
 on:
   schedule:
-    - cron: '*/5 * * * *'   # every 5 minutes, 24x7
-  workflow_dispatch:         # manual trigger from GitHub UI
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
 
 jobs:
   poll-and-analyze:
@@ -31,8 +25,8 @@ jobs:
 
       - name: Poll Telegram & run analysis if commanded
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TG_CHAT_ID:         ${{ secrets.TG_CHAT_ID }}
-          SUPABASE_URL:       ${{ secrets.SUPABASE_URL }}
+          TELEGRAM_BOT_TOKEN:  ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:    ${{ secrets.TELEGRAM_CHAT_ID }}
+          SUPABASE_URL:        ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: python scripts/tg_bot.py
