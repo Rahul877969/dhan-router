@@ -2,6 +2,36 @@ name: Nightly Strategy Engine
 
 on:
   schedule:
+    - cron: '0 16 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  run-engine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests supabase
+
+      - name: Run nightly scoring engine
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python scripts/nightly_engine.py
+name: Nightly Strategy Engine
+
+on:
+  schedule:
     # 9:30 PM IST = 16:00 UTC (MonâFri only)
     - cron: '0 16 * * 1-5'
   workflow_dispatch:   # also lets you trigger manually from GitHub UI
