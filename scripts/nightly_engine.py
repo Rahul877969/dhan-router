@@ -15,7 +15,7 @@ Env vars (set in GitHub Secrets):
   TELEGRAM_CHAT_ID      your personal chat ID
 """
 
-import os, json, time, datetime, requests
+import os, json, time, datetime, requests, html as _html
 from supabase import create_client
 
 # -- Clients --------------------------------------------------
@@ -228,12 +228,12 @@ def compute_scores(market, momentum):
         breakdown["zen"].append("BEAR -> Zen +2")
         breakdown["damp"].append("BEAR -> Damp +1")
     else:  # EXTREME
-        breakdown["zen"].append("VIX>22 EXTREME -- all paused")
+        breakdown["zen"].append("VIX &gt;22 EXTREME -- all paused")
 
     # -- 2. VIX LEVEL (1 pt) -- FIX A: threshold 16, not 14 --
     if vix < 16:
         zen += 1
-        breakdown["zen"].append(f"VIX {vix:.1f} (<16 low) -> Zen +1")
+        breakdown["zen"].append(f"VIX {vix:.1f} (&lt;16 low) -> Zen +1")
     else:
         curv += 1
         breakdown["curv"].append(f"VIX {vix:.1f} (>=16 elevated) -> Curv +1")
@@ -265,10 +265,10 @@ def compute_scores(market, momentum):
     # -- 4. PCR (1 pt) --
     if pcr > 1.25:
         damp += 1
-        breakdown["damp"].append(f"PCR {pcr:.2f} (>1.25 bullish) -> Damp +1")
+        breakdown["damp"].append(f"PCR {pcr:.2f} (&gt;1.25 bullish) -> Damp +1")
     elif pcr < 0.80:
         curv += 1
-        breakdown["curv"].append(f"PCR {pcr:.2f} (<0.80 bearish) -> Curv +1")
+        breakdown["curv"].append(f"PCR {pcr:.2f} (&lt;0.80 bearish) -> Curv +1")
     else:
         zen += 1
         breakdown["zen"].append(f"PCR {pcr:.2f} (neutral) -> Zen +1")
@@ -574,7 +574,7 @@ def build_telegram_message(verdict_text, winner, reason, market,
     regime_why             = _regime_analysis(market)
     strategy_why, top_bd   = _strategy_analysis(market, winner, z, c, d, gap, breakdown)
     flip_conds             = _flip_conditions(market, winner, gap)
-    bd_lines = "\n".join(f"  {l}" for l in top_bd) if top_bd else "  (no detail)"
+    bd_lines = "\n".join(f"  {_html.escape(l)}" for l in top_bd) if top_bd else "  (no detail)"
 
     msg = (
         f"<b>{e_bot} Dhan Strategy Router -- {today}</b>\n\n"
