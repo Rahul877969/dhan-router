@@ -61,7 +61,10 @@ def run_analysis(chat_id):
          "⏳ <b>Fetching live market data...</b>\n"
          "Full analysis + WHY section in ~60 sec ⚡")
     engine = os.path.join(os.path.dirname(os.path.abspath(__file__)), "nightly_engine.py")
-    result = subprocess.run([sys.executable, engine], capture_output=True, text=True)
+    # Override chat so analysis always replies to whoever sent the command
+    env = os.environ.copy()
+    env["TELEGRAM_CHAT_ID"] = str(chat_id)
+    result = subprocess.run([sys.executable, engine], capture_output=True, text=True, env=env)
     if result.returncode != 0:
         print("[bot] Engine stderr:", result.stderr[-800:])
         send(chat_id, "❌ Analysis failed — check GitHub Actions logs.")
