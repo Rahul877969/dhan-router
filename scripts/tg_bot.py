@@ -1,135 +1,89 @@
 """
-Telegram Bot Poller  v1.0
+Telegram Bot Poller  v1.1
 =========================
 Runs every 5 min via GitHub Actions.
-When you send ANY /command in your Telegram chat, within 5 min this script:
-  1. Sends  "Fetching live market data..."  back to you
-  2. Runs   nightly_engine.py  (live NSE fetch -> score -> WHY analysis)
-  3. nightly_engine.py sends the full analysis to Telegram automatically
-
-Supported commands (any / prefix works):
-  /analysis   /verdict   /why   /report   /check   /now
+Send /analysis (or any /command) -> within 5 min you get full WHY analysis.
 """
 
-import os
-import sys
-import time
-import subprocess
-import requests
+import os, sys, time, subprocess, requests
 
 TOKEN   = os.environ["TELEGRAM_BOT_TOKEN"]
-CHAT_ID = os.environ.get("TG_CHAT_ID", "")   # restrict to your chat only
+CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")   # matches nightly.yml secret name
 API     = f"https://api.telegram.org/bot{TOKEN}"
-
-# How old a command message can be and still be acted on (seconds)
-# Set to 480 (8 min) so any 5-min poll window is covered with overlap
-MAX_AGE = 480
+MAX_AGE = 600   # 10 min window to catch commands even with poll delays
 
 
-def send(chat_id: str, text: str) -> None:
+def send(chat_id, text):
     try:
-        requests.post(
-            f"{API}/sendMessage",
-            json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"},
-            timeout=10,
-        )
-    except Exception as exc:
-        print(f"[bot] sendMessage error: {exc}")
+        requests.post(f"{API}/sendMessage",
+                      json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"},
+                      timeout=10)
+    except Exception as e:
+        print(f"[bot] sendMessage error: {e}")
 
 
-def get_updates() -> list:
+def get_updates():
     try:
-        r = requests.get(
-            f"{API}/getUpdates",
-            params={"limit": 20, "timeout": 0},
-            timeout=15,
-        )
+        r = requests.get(f"{API}/getUpdates", params={"limit": 20, "timeout": 0}, timeout=15)
         return r.json().get("result", [])
-    except Exception as exc:
-        print(f"[bot] getUpdates error: {exc}")
+    except Exception as e:
+        print(f"[bot] getUpdates error: {e}")
         return []
 
 
-def ack_updates(last_id: int) -> None:
-    """Mark all updates up to last_id as processed."""
+def ack(last_id):
     try:
-        requests.get(
-            f"{API}/getUpdates",
-            params={"offset": last_id + 1, "limit": 1},
-            timeout=10,
-        )
+        requests.get(f"{API}/getUpdates", params={"offset": last_id + 1, "limit": 1}, timeout=10)
     except Exception:
         pass
 
 
-def run_analysis(chat_id: str) -> None:
-    """Fire nightly_engine.py as a subprocess; it sends Telegram msg itself."""
+def run_analysis(chat_id):
     send(chat_id,
          "⏳ <b>Fetching live market data...</b>\n"
-         "Full analysis + WHY section coming in ~60 sec ⚡")
-
-    engine = os.path.join(os.path.dirname(__file__), "nightly_engine.py")
-    result = subprocess.run(
-        [sys.executable, engine],
-        capture_output=True,
-        text=True,
-    )
-
+         "Full analysis + WHY section arriving in ~60 sec ⚡")
+    engine = os.path.join(os.path.dirname(os.path.abspath(__file__)), "nightly_engine.py")
+    result = subprocess.run([sys.executable, engine], capture_output=True, text=True)
     if result.returncode != 0:
-        print("[bot] Engine stderr:", result.stderr[-800:])
-        send(chat_id,
-             "❌ Analysis failed — check GitHub Actions logs.")
+        print("[bot] Engine error:", result.stderr[-800:])
+        send(chat_id, "❌ Analysis failed — check GitHub Actions logs.")
     else:
-        print("[bot] Analysis completed and sent to Telegram.")
-        if result.stdout:
-            print(result.stdout[-400:])
+        print("[bot] Analysis sent successfully.")
 
 
-def main() -> None:
+def main():
     now = time.time()
     updates = get_updates()
-
     if not updates:
-        print("[bot] No updates from Telegram.")
+        print("[bot] No Telegram updates.")
         return
 
-    command_chat  = None
-    last_update_id = None
-
+    command_chat = None
+    last_uid = None
     for u in updates:
-        uid = u["update_id"]
-        last_update_id = uid
-
+        last_uid = u["update_id"]
         msg = u.get("message") or u.get("channel_post")
         if not msg:
             continue
-
         chat_id  = str(msg["chat"]["id"])
         text     = msg.get("text", "")
         msg_time = msg.get("date", 0)
-
-        # Skip stale messages
         if now - msg_time > MAX_AGE:
             continue
-
-        # Skip unauthorised chats (if TG_CHAT_ID env var is set)
         if CHAT_ID and chat_id != CHAT_ID:
-            print(f"[bot] Ignoring msg from unknown chat {chat_id}")
+            print(f"[bot] Ignored msg from chat {chat_id}")
             continue
-
         if text.startswith("/"):
-            print(f"[bot] Command '{text}' received from chat {chat_id}")
+            print(f"[bot] Command '{text}' from chat {chat_id} (age {int(now-msg_time)}s)")
             command_chat = chat_id
-            # Use the most recent command's chat (last write wins)
 
-    # Acknowledge all updates so they don't repeat next poll
-    if last_update_id is not None:
-        ack_updates(last_update_id)
+    if last_uid is not None:
+        ack(last_uid)
 
     if command_chat:
         run_analysis(command_chat)
     else:
-        print("[bot] No recent /commands found. Idle.")
+        print("[bot] No recent /commands. Idle.")
 
 
 if __name__ == "__main__":
