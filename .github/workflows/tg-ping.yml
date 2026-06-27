@@ -1,0 +1,22 @@
+name: TG Ping Test
+on: [workflow_dispatch]
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send test ping
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python3 -c "
+import os, requests
+token = os.environ['TELEGRAM_BOT_TOKEN']
+chat_id = os.environ['TELEGRAM_CHAT_ID']
+print(f'Sending to chat_id: {chat_id}')
+r = requests.post(
+    f'https://api.telegram.org/bot{token}/sendMessage',
+    json={'chat_id': chat_id, 'text': 'TEST PING from bot - if you see this, delivery works!', 'parse_mode': 'HTML'}
+)
+print('Response:', r.status_code, r.json())
+"
