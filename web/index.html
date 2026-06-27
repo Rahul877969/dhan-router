@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dhan Strategy Router</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  :root {
+    --bg: #0f1117; --surface: #1a1d27; --surface2: #22263a;
+    --border: rgba(255,255,255,.08); --text: #e8eaf0; --muted: #7c82a0;
+    --green: #4ade80; --red: #f87171; --yellow: #fbbf24; --blue: #60a5fa;
+    --purple: #a78bfa; --radius: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-height: 100vh; }
+
+  /* ââ Login ââ */
+  #login-screen { display:flex; align-items:center; justify-content:center; min-height:100vh; }
+  .login-card { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:32px; width:320px; }
+  .login-card h1 { font-size:18px; font-weight:600; margin-bottom:6px; }
+  .login-card p  { font-size:13px; color:var(--muted); margin-bottom:24px; }
+  .login-card input { width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:12px 14px; color:var(--text); font-size:14px; outline:none; margin-bottom:12px; }
+  .login-card input:focus { border-color: var(--blue); }
+  .btn { width:100%; background:var(--blue); color:#000; font-weight:600; font-size:14px; border:none; border-radius:8px; padding:12px; cursor:pointer; }
+  .btn:hover { opacity:.9; }
+  .login-err { font-size:12px; color:var(--red); margin-top:8px; text-align:center; display:none; }
+
+  /* ââ App ââ */
+  #app { display:none; padding:16px; max-width:900px; margin:0 auto; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }
+  .header h1 { font-size:16px; font-weight:600; }
+  .header-right { display:flex; align-items:center; gap:12px; }
+  .refresh-btn { background:var(--surface2); border:1px solid var(--border); color:var(--muted); border-radius:8px; padding:6px 12px; font-size:12px; cursor:pointer; }
+  .refresh-btn:hover { color:var(--text); }
+  .logout-btn { background:none; border:none; color:var(--muted); font-size:12px; cursor:pointer; }
+
+  /* ââ Hero verdict ââ */
+  .verdict-card { border-radius:var(--radius); padding:20px 22px; margin-bottom:16px; border:1px solid; }
+  .verdict-card.activate { background:rgba(74,222,128,.08); border-color:rgba(74,222,128,.3); }
+  .verdict-card.lean     { background:rgba(96,165,250,.08); border-color:rgba(96,165,250,.3); }
+  .verdict-card.default  { background:rgba(251,191,36,.08); border-color:rgba(251,191,36,.3); }
+  .verdict-card.pause    { background:rgba(248,113,113,.08); border-color:rgba(248,113,113,.3); }
+  .verdict-label { font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin-bottom:6px; }
+  .verdict-text  { font-size:22px; font-weight:700; margin-bottom:6px; }
+  .verdict-reason { font-size:13px; color:var(--muted); line-height:1.5; }
+  .verdict-date  { font-size:11px; color:var(--muted); margin-top:8px; }
+
+  /* ââ Grid ââ */
+  .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px; }
+  .grid-3 { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:12px; }
+  .grid-4 { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:12px; }
+  @media(max-width:600px) { .grid-2,.grid-3,.grid-4 { grid-template-columns:1fr 1fr; } }
+
+  /* ââ Cards ââ */
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px 16px; }
+  .card-label { font-size:10px; font-weight:500; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin-bottom:6px; }
+  .card-val   { font-size:20px; font-weight:600; }
+  .card-sub   { font-size:11px; color:var(--muted); margin-top:3px; }
+  .sec-title  { font-size:11px; font-weight:500; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; border-bottom:1px solid var(--border); padding-bottom:8px; margin-bottom:12px; }
+
+  /* ââ Score bars ââ */
+  .score-row { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+  .score-label { font-size:12px; width:80px; flex-shrink:0; }
+  .score-bar-wrap { flex:1; background:var(--surface2); border-radius:4px; height:8px; }
+  .score-bar { height:8px; border-radius:4px; transition:width .4s; }
+  .score-num { font-size:12px; font-weight:600; width:30px; text-align:right; }
+
+  /* ââ Global heatmap ââ */
+  .heatmap-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  @media(max-width:500px) { .heatmap-grid { grid-template-columns:1fr 1fr; } }
+  .heat-cell { background:var(--surface2); border-radius:8px; padding:10px 12px; text-align:center; border:1px solid var(--border); }
+  .heat-name { font-size:10px; color:var(--muted); margin-bottom:4px; }
+  .heat-val  { font-size:15px; font-weight:600; }
+  .heat-chg  { font-size:11px; margin-top:2px; }
+  .pos { color:var(--green); }
+  .neg { color:var(--red); }
+  .neu { color:var(--muted); }
+
+  /* ââ History table ââ */
+  .history-table { width:100%; border-collapse:collapse; font-size:12px; }
+  .history-table th { text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); padding:8px 10px; border-bottom:1px solid var(--border); }
+  .history-table td { padding:8px 10px; border-bottom:1px solid var(--border); }
+  .history-table tr:last-child td { border-bottom:none; }
+  .badge { display:inline-block; font-size:10px; font-weight:500; padding:2px 8px; border-radius:20px; }
+  .b-zen  { background:rgba(74,222,128,.15); color:var(--green); }
+  .b-curv { background:rgba(96,165,250,.15); color:var(--blue); }
+  .b-damp { background:rgba(167,139,250,.15); color:var(--purple); }
+  .b-pause{ background:rgba(248,113,113,.15); color:var(--red); }
+
+  .chart-wrap { position:relative; height:160px; }
+  .loading { color:var(--muted); font-size:13px; padding:20px 0; }
+  .regime-pill { display:inline-block; font-size:11px; font-weight:600; padding:3px 10px; border-radius:20px; }
+  .r-bull { background:rgba(74,222,128,.15); color:var(--green); }
+  .r-bear { background:rgba(248,113,113,.15); color:var(--red); }
+  .r-side { background:rgba(251,191,36,.15);  color:var(--yellow); }
+  .r-ext  { background:rgba(248,113,113,.3);  color:var(--red); }
+</style>
+</head>
+<body>
+
+<!-- ââ LOGIN âââââââââââââââââââââââââââââââââââââââââââââââââââ -->
+<div id="login-screen">
+  <div class="login-card">
+    <h1>ð¤ Strategy Router</h1>
+    <p>Private â enter your access password</p>
+    <input type="password" id="pw-input" placeholder="Password" onkeydown="if(event.key==='Enter')doLogin()">
+    <button class="btn" onclick="doLogin()">Unlock Dashboard</button>
+    <div class="login-err" id="login-err">Incorrect password</div>
+  </div>
+</div>
+
+<!-- ââ APP ââââââââââââââââââââââââââââââââââââââââââââââââââââ -->
+<div id="app">
+  <div class="header">
+    <h1>ð¤ Dhan Strategy Router <span style="font-size:11px;color:var(--muted);font-weight:400">v2</span></h1>
+    <div class="header-right">
+      <button class="refresh-btn" onclick="loadAll()">â³ Refresh</button>
+      <button class="logout-btn" onclick="logout()">Logout</button>
+    </div>
+  </div>
+
+  <!-- Tonight's verdict -->
+  <div id="verdict-card" class="verdict-card lean">
+    <div class="verdict-label">Tonight's verdict</div>
+    <div class="verdict-text" id="verdict-text">Loadingâ¦</div>
+    <div class="verdict-reason" id="verdict-reason"></div>
+    <div class="verdict-date" id="verdict-date"></div>
+  </div>
+
+  <!-- Regime + scores -->
+  <div class="grid-2" style="margin-bottom:12px">
+    <div class="card">
+      <div class="card-label">Market Regime</div>
+      <div style="margin-top:6px" id="regime-pill"><span class="regime-pill r-side">SIDEWAYS</span></div>
+      <div class="card-sub" id="regime-sub">20d return: â  |  50 DMA: â</div>
+    </div>
+    <div class="card">
+      <div class="card-label">India VIX</div>
+      <div class="card-val" id="vix-val">â</div>
+      <div class="card-sub" id="vix-sub">PCR: â</div>
+    </div>
+  </div>
+
+  <!-- Score bars -->
+  <div class="card" style="margin-bottom:12px">
+    <div class="sec-title">v2 Scores â 10 pts max</div>
+    <div class="score-row">
+      <div class="score-label" style="color:var(--green)">Zen CS</div>
+      <div class="score-bar-wrap"><div class="score-bar" id="bar-zen" style="width:0%;background:var(--green)"></div></div>
+      <div class="score-num" id="num-zen">â</div>
+    </div>
+    <div class="score-row">
+      <div class="score-label" style="color:var(--blue)">Curvature</div>
+      <div class="score-bar-wrap"><div class="score-bar" id="bar-curv" style="width:0%;background:var(--blue)"></div></div>
+      <div class="score-num" id="num-curv">â</div>
+    </div>
+    <div class="score-row">
+      <div class="score-label" style="color:var(--purple)">Damper CS</div>
+      <div class="score-bar-wrap"><div class="score-bar" id="bar-damp" style="width:0%;background:var(--purple)"></div></div>
+      <div class="score-num" id="num-damp">â</div>
+    </div>
+    <div style="display:flex;gap:24px;margin-top:12px;border-top:1px solid var(--border);padding-top:10px">
+      <div><span style="font-size:10px;color:var(--muted)">Zen streak</span><br><span id="streak-zen" style="font-size:14px;font-weight:600">â</span></div>
+      <div><span style="font-size:10px;color:var(--muted)">Curv streak</span><br><span id="streak-curv" style="font-size:14px;font-weight:600">â</span></div>
+      <div><span style="font-size:10px;color:var(--muted)">Damp streak</span><br><span id="streak-damp" style="font-size:14px;font-weight:600">â</span></div>
+    </div>
+  </div>
+
+  <!-- Global market heatmap -->
+  <div class="card" style="margin-bottom:12px">
+    <div class="sec-title">Global market signals</div>
+    <div class="heatmap-grid" id="global-grid">
+      <div class="heat-cell"><div class="heat-name">S&P 500</div><div class="heat-val" id="g-sp500">â</div><div class="heat-chg" id="g-sp500c">â</div></div>
+      <div class="heat-cell"><div class="heat-name">Nasdaq</div><div class="heat-val">â</div><div class="heat-chg" id="g-nasc">â</div></div>
+      <div class="heat-cell"><div class="heat-name">US VIX</div><div class="heat-val" id="g-usvix">â</div><div class="heat-chg" id="g-usvixc" style="font-size:10px;color:var(--muted)"></div></div>
+      <div class="heat-cell"><div class="heat-name">DXY (Dollar)</div><div class="heat-val" id="g-dxy">â</div><div class="heat-chg" style="font-size:10px;color:var(--muted)">Index</div></div>
+      <div class="heat-cell"><div class="heat-name">Crude Oil</div><div class="heat-val" id="g-crude">â</div><div class="heat-chg" style="font-size:10px;color:var(--muted)">$/bbl</div></div>
+      <div class="heat-cell"><div class="heat-name">Fear & Greed</div><div class="heat-val" id="g-fg">â</div><div class="heat-chg" id="g-fgl" style="font-size:10px;color:var(--muted)"></div></div>
+    </div>
+  </div>
+
+  <!-- Capital curve -->
+  <div class="card" style="margin-bottom:12px">
+    <div class="sec-title">Portfolio growth (70% reinvest rule)</div>
+    <div class="chart-wrap"><canvas id="capitalChart"></canvas></div>
+    <div class="grid-3" style="margin-top:12px">
+      <div><div style="font-size:10px;color:var(--muted)">Portfolio today</div><div style="font-size:16px;font-weight:600;color:var(--green)" id="cap-now">â</div></div>
+      <div><div style="font-size:10px;color:var(--muted)">Cash withdrawn</div><div style="font-size:16px;font-weight:600;color:var(--blue)" id="cap-withdrawn">â</div></div>
+      <div><div style="font-size:10px;color:var(--muted)">Total wealth</div><div style="font-size:16px;font-weight:600" id="cap-total">â</div></div>
+    </div>
+  </div>
+
+  <!-- Verdict history -->
+  <div class="card" style="margin-bottom:24px">
+    <div class="sec-title">Verdict history â last 10 days</div>
+    <div id="history-loading" class="loading">Loading historyâ¦</div>
+    <table class="history-table" id="history-table" style="display:none">
+      <thead><tr><th>Date</th><th>Regime</th><th>Verdict</th><th>Scores</th><th>Signal</th></tr></thead>
+      <tbody id="history-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+// ââ CONFIG â fill after Supabase project created ââââââââââââââ
+const SUPABASE_URL = 'https://tgrvyerkaienmggitbxe.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRncnZ5ZXJkYWllbm1nZ2k0YnhlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1NTU4NzUsImV4cCI6MjA5ODEzMTg3NX0.I-NyCUwlRsxr-keaPOY_GqfK_RbJ5ECBQ2udi-EQfMw';
+const APP_PASSWORD = 'dhan@Router2025';           // change this to your preferred password
+
+const { createClient } = supabase;
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ââ Auth ââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+function doLogin() {
+  const pw = document.getElementById('pw-input').value;
+  if (pw === APP_PASSWORD) {
+    sessionStorage.setItem('auth', '1');
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    loadAll();
+  } else {
+    document.getElementById('login-err').style.display = 'block';
+  }
+}
+function logout() {
+  sessionStorage.removeItem('auth');
+  location.reload();
+}
+window.onload = () => {
+  if (sessionStorage.getItem('auth') === '1') {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    loadAll();
+  }
+};
+
+// ââ Helpers âââââââââââââââââââââââââââââââââââââââââââââââââââ
+const fmtChg = v => v == null ? 'â' : `${v > 0 ? '+' : ''}${v.toFixed(2)}%`;
+const chgClass = v => v == null ? 'neu' : v > 0 ? 'pos' : v < 0 ? 'neg' : 'neu';
+const regimeCls = r => ({ BULL:'r-bull', BEAR:'r-bear', SIDEWAYS:'r-side', EXTREME:'r-ext' })[r] || 'r-side';
+const stratBadge = s => {
+  if (!s) return '';
+  if (s === 'ZEN')       return `<span class="badge b-zen">Zen CS</span>`;
+  if (s === 'CURVATURE') return `<span class="badge b-curv">Curv CS</span>`;
+  if (s === 'DAMPER')    return `<span class="badge b-damp">Damper CS</span>`;
+  return `<span class="badge b-pause">PAUSE</span>`;
+};
+
+// ââ Load everything âââââââââââââââââââââââââââââââââââââââââââ
+async function loadAll() {
+  await Promise.all([loadVerdict(), loadCapital(), loadHistory()]);
+}
+
+async function loadVerdict() {
+  try {
+    const [snapRes, verdRes] = await Promise.all([
+      sb.from('market_snapshots').select('*').order('snapshot_date', { ascending: false }).limit(1),
+      sb.from('strategy_verdicts').select('*').order('verdict_date', { ascending: false }).limit(1),
+    ]);
+    const snap = snapRes.data?.[0];
+    const verd = verdRes.data?.[0];
+
+    if (verd) {
+      // Verdict card
+      const vt = verd.verdict_text || '';
+      const vc = document.getElementById('verdict-card');
+      vc.className = 'verdict-card ' +
+        (vt.includes('ACTIVATE') ? 'activate' : vt.includes('LEAN') ? 'lean' :
+         vt.includes('PAUSE') ? 'pause' : 'default');
+      document.getElementById('verdict-text').textContent = vt;
+      document.getElementById('verdict-reason').textContent = verd.reason || '';
+      document.getElementById('verdict-date').textContent = `Date: ${verd.verdict_date}  |  Gap: ${verd.gap} pts`;
+
+      // Scores
+      const maxScore = Math.max(verd.zen_score, verd.curv_score, verd.damp_score, 1);
+      document.getElementById('bar-zen').style.width  = (verd.zen_score  / 10 * 100) + '%';
+      document.getElementById('bar-curv').style.width = (verd.curv_score / 10 * 100) + '%';
+      document.getElementById('bar-damp').style.width = (verd.damp_score / 10 * 100) + '%';
+      document.getElementById('num-zen').textContent  = verd.zen_score;
+      document.getElementById('num-curv').textContent = verd.curv_score;
+      document.getElementById('num-damp').textContent = verd.damp_score;
+
+      const fmtStreak = s => s == null ? 'â' : (s >= 0 ? `+${s}ð¥` : `${s}âï¸`);
+      document.getElementById('streak-zen').textContent  = fmtStreak(verd.zen_streak);
+      document.getElementById('streak-curv').textContent = fmtStreak(verd.curv_streak);
+      document.getElementById('streak-damp').textContent = fmtStreak(verd.damp_streak);
+    }
+
+    if (snap) {
+      // Regime
+      document.getElementById('regime-pill').innerHTML =
+        `<span class="regime-pill ${regimeCls(snap.regime)}">${snap.regime}</span>`;
+      document.getElementById('regime-sub').textContent =
+        `20d return: ${snap.ret_20d != null ? snap.ret_20d.toFixed(1)+'%' : 'â'}  |  50 DMA: ${snap.above_dma50 ? 'ABOVE â' : 'BELOW â'}`;
+
+      // VIX
+      document.getElementById('vix-val').textContent =
+        snap.vix != null ? snap.vix.toFixed(2) : 'â';
+      document.getElementById('vix-sub').textContent =
+        `${fmtChg(snap.vix_chg_pct)} today  |  PCR: ${snap.pcr ?? 'â'}`;
+
+      // Global
+      const setGlobal = (id, val, dp=2) =>
+        { document.getElementById(id).textContent = val != null ? val.toFixed(dp) : 'â'; };
+      const setChg = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) { el.textContent = fmtChg(val); el.className = 'heat-chg ' + chgClass(val); }
+      };
+      setGlobal('g-sp500', snap.sp500, 0);
+      setChg('g-sp500c', snap.sp500_chg_pct);
+      setChg('g-nasc', snap.nasdaq_chg_pct);
+      setGlobal('g-usvix', snap.us_vix, 1);
+      setGlobal('g-dxy', snap.dxy, 1);
+      setGlobal('g-crude', snap.crude_oil, 1);
+
+      const fg = snap.fear_greed;
+      document.getElementById('g-fg').textContent = fg ?? 'â';
+      document.getElementById('g-fgl').textContent =
+        fg == null ? '' : fg >= 75 ? 'Extreme Greed' : fg >= 55 ? 'Greed' :
+        fg >= 45 ? 'Neutral' : fg >= 25 ? 'Fear' : 'Extreme Fear';
+    }
+  } catch(e) { console.error('loadVerdict:', e); }
+}
+
+let capitalChart = null;
+async function loadCapital() {
+  try {
+    const { data } = await sb.from('capital_log')
+      .select('month,portfolio_after,cum_withdrawn,gross_pnl,active_strategy')
+      .order('month', { ascending: true });
+    if (!data?.length) return;
+
+    const labels   = data.map(r => r.month.slice(0,7));
+    const portfolio = data.map(r => +(r.portfolio_after/1000).toFixed(1));
+    const withdrawn = data.map(r => +(r.cum_withdrawn/1000).toFixed(1));
+
+    const last = data[data.length - 1];
+    document.getElementById('cap-now').textContent       = `Rs.${(last.portfolio_after/1000).toFixed(1)}K`;
+    document.getElementById('cap-withdrawn').textContent = `Rs.${(last.cum_withdrawn/1000).toFixed(1)}K`;
+    document.getElementById('cap-total').textContent     =
+      `Rs.${((last.portfolio_after + last.cum_withdrawn)/1000).toFixed(1)}K`;
+
+    if (capitalChart) capitalChart.destroy();
+    capitalChart = new Chart(document.getElementById('capitalChart'), {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          { label: 'Portfolio', data: portfolio, backgroundColor: 'rgba(74,222,128,.6)', borderRadius:3, stack:'a' },
+          { label: 'Withdrawn', data: withdrawn, backgroundColor: 'rgba(96,165,250,.4)', borderRadius:3, stack:'a' },
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend:{ labels:{ color:'#7c82a0', font:{size:10}, boxWidth:10 } },
+                   tooltip:{ callbacks:{ label: c => `Rs.${c.parsed.y}K` } } },
+        scales: {
+          x: { stacked:true, ticks:{color:'#7c82a0',font:{size:9}}, grid:{color:'rgba(255,255,255,.05)'} },
+          y: { stacked:true, ticks:{color:'#7c82a0',font:{size:9},callback:v=>`Rs.${v}K`}, grid:{color:'rgba(255,255,255,.05)'} }
+        }
+      }
+    });
+  } catch(e) { console.error('loadCapital:', e); }
+}
+
+async function loadHistory() {
+  try {
+    const { data } = await sb.from('strategy_verdicts')
+      .select('verdict_date,regime,winner,verdict_text,zen_score,curv_score,damp_score,signal_strength,gap')
+      .order('verdict_date', { ascending: false }).limit(10);
+
+    document.getElementById('history-loading').style.display = 'none';
+    const tbl = document.getElementById('history-table');
+    const tbody = document.getElementById('history-body');
+    if (!data?.length) { tbody.innerHTML = '<tr><td colspan="5" style="color:var(--muted);padding:16px">No history yet</td></tr>'; }
+    else {
+      tbody.innerHTML = data.map(r => `
+        <tr>
+          <td>${r.verdict_date}</td>
+          <td><span class="regime-pill ${regimeCls(r.regime)}" style="font-size:10px;padding:2px 7px">${r.regime}</span></td>
+          <td>${stratBadge(r.winner)}</td>
+          <td style="color:var(--muted)">Z${r.zen_score} C${r.curv_score} D${r.damp_score}</td>
+          <td style="font-size:11px;color:var(--muted)">${r.signal_strength || ''} (gap=${r.gap})</td>
+        </tr>`).join('');
+    }
+    tbl.style.display = 'table';
+  } catch(e) { console.error('loadHistory:', e); }
+}
+</script>
+</body>
+</html>
